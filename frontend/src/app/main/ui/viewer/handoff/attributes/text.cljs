@@ -6,6 +6,7 @@
 
 (ns app.main.ui.viewer.handoff.attributes.text
   (:require
+   [app.common.data :as d]
    [app.common.text :as txt]
    [app.main.fonts :as fonts]
    [app.main.store :as st]
@@ -14,6 +15,7 @@
    [app.util.code-gen :as cg]
    [app.util.color :as uc]
    [app.util.i18n :refer [tr]]
+   [app.util.strings :as ust]
    [cuerdas.core :as str]
    [okulary.core :as l]
    [rumext.v2 :as mf]))
@@ -66,7 +68,7 @@
   ([style & properties]
    (cg/generate-css-props style properties params)))
 
-(mf/defc typography-block [{:keys [text style full-style]}]
+(mf/defc typography-block [{:keys [text style]}]
   (let [typography-library-ref (mf/use-memo
                                 (mf/deps (:typography-ref-file style))
                                 (make-typographies-library-ref (:typography-ref-file style)))
@@ -76,7 +78,11 @@
 
         color-format (mf/use-state :hex)
 
-        typography (get (or typography-library file-typographies) (:typography-ref-id style))]
+        typography (get (or typography-library file-typographies) (:typography-ref-id style))
+
+        clean-number #(-> %
+                          d/parse-double
+                          (ust/format-precision 2))]
 
     [:div.attributes-text-block
      (if (:typography-ref-id style)
@@ -86,21 +92,18 @@
           {:style {:font-family (:font-family typography)
                    :font-weight (:font-weight typography)
                    :font-style (:font-style typography)}}
-          (tr "workspace.assets.typography.sample")]]
+          (tr "workspace.assets.typography.text-styles")]]
         [:div.typography-entry-name (:name typography)]
         [:& copy-button {:data (copy-style-data typography)}]]
 
        [:div.attributes-typography-row
         [:div.typography-sample
-         {:style {:font-family (:font-family full-style)
-                  :font-weight (:font-weight full-style)
-                  :font-style (:font-style full-style)}}
-         (tr "workspace.assets.typography.sample")]
+         {:style {:font-family (:font-family style)
+                  :font-weight (:font-weight style)
+                  :font-style (:font-style style)}}
+         (tr "workspace.assets.typography.text-styles")]
         [:& copy-button {:data (copy-style-data style)}]])
 
-     [:div.attributes-content-row
-      [:pre.attributes-content (str/trim text)]
-      [:& copy-button {:data (str/trim text)}]]
      (when (:fills style)
        (for [fill (:fills style)]
 
@@ -124,19 +127,19 @@
      (when (:font-size style)
        [:div.attributes-unit-row
         [:div.attributes-label (tr "handoff.attributes.typography.font-size")]
-        [:div.attributes-value (str (:font-size style)) "px"]
+        [:div.attributes-value (str (clean-number (:font-size style))) "px"]
         [:& copy-button {:data (copy-style-data style :font-size)}]])
 
      (when (:line-height style)
        [:div.attributes-unit-row
         [:div.attributes-label (tr "handoff.attributes.typography.line-height")]
-        [:div.attributes-value (str (:line-height style)) "px"]
+        [:div.attributes-value (clean-number (:line-height style))]
         [:& copy-button {:data (copy-style-data style :line-height)}]])
 
      (when (:letter-spacing style)
        [:div.attributes-unit-row
         [:div.attributes-label (tr "handoff.attributes.typography.letter-spacing")]
-        [:div.attributes-value (str (:letter-spacing style)) "px"]
+        [:div.attributes-value (str (clean-number (:letter-spacing style))) "px"]
         [:& copy-button {:data (copy-style-data style :letter-spacing)}]])
 
      (when (:text-decoration style)
@@ -158,16 +161,12 @@
         ;;   handoff.attributes.typography.text-transform.titlecase
         ;;   handoff.attributes.typography.text-transform.uppercase
         [:div.attributes-value (->> style :text-transform (str "handoff.attributes.typography.text-transform.") (tr))]
-        [:& copy-button {:data (copy-style-data style :text-transform)}]])]))
+        [:& copy-button {:data (copy-style-data style :text-transform)}]])
 
+     [:div.attributes-content-row
+      [:pre.attributes-content (str/trim text)]
+      [:& copy-button {:data (str/trim text)}]]]))
 
-(defn- remove-equal-values
-  [m1 m2]
-  (if (and (map? m1) (map? m2) (not (nil? m1)) (not (nil? m2)))
-    (->> m1
-         (remove (fn [[k v]] (= (k m2) v)))
-         (into {}))
-    m1))
 
 (mf/defc text-block [{:keys [shape]}]
   (let [style-text-blocks (->> (keys txt/default-text-attrs)
@@ -175,18 +174,10 @@
                                (remove (fn [[_ text]] (str/empty? (str/trim text))))
                                (mapv (fn [[style text]] (vector (merge txt/default-text-attrs style) text))))]
 
-    (for [[idx [full-style text]] (map-indexed vector style-text-blocks)]
-      (let [previous-style (first (nth style-text-blocks (dec idx) nil))
-            style (remove-equal-values full-style previous-style)
-
-            ;; If the color is set we need to add opacity otherwise the display will not work
-            style (cond-> style
-                    (:fill-color style)
-                    (assoc :fill-opacity (:fill-opacity full-style)))]
-        [:& typography-block {:shape shape
-                              :full-style full-style
-                              :style style
-                              :text text}]))))
+    (for [[_ [full-style text]] (map-indexed vector style-text-blocks)]
+      [:& typography-block {:shape shape
+                            :style full-style
+                            :text text}])))
 
 (mf/defc text-panel
   [{:keys [shapes]}]

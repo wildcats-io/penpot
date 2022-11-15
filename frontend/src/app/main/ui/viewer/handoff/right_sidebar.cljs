@@ -57,7 +57,7 @@
              ;;   handoff.tabs.code.selected.rect
              ;;   handoff.tabs.code.selected.svg-raw
              ;;   handoff.tabs.code.selected.text
-             [:span.tool-window-bar-title (->> selected-type d/name (str "handoff.tabs.code.selected.") (tr))]])]
+             [:span.tool-window-bar-title (:name first-shape)]])]
          [:div.tool-window-content
           [:& tab-container {:on-change-tab #(do
                                                (reset! expanded false)
