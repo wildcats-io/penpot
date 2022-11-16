@@ -1588,7 +1588,9 @@
     ptk/UpdateEvent
     (update [_ state]
       (assoc state :remove-graphics {:total total
-                                     :current nil}))))
+                                     :current nil
+                                     :error false
+                                     :completed false}))))
 
 (defn- update-remove-graphics
   [current]
@@ -1597,12 +1599,31 @@
     (update [_ state]
       (assoc-in state [:remove-graphics :current] current))))
 
+(defn- error-in-remove-graphics
+  []
+  (ptk/reify ::error-in-remove-graphics
+    ptk/UpdateEvent
+    (update [_ state]
+      (assoc-in state [:remove-graphics :error] true))))
+
+(defn clear-remove-graphics
+  []
+  (ptk/reify ::clear-remove-graphics
+    ptk/UpdateEvent
+    (update [_ state]
+      (dissoc state :remove-graphics))))
+
 (defn- complete-remove-graphics
   []
   (ptk/reify ::complete-remove-graphics
     ptk/UpdateEvent
     (update [_ state]
-      (dissoc state :remove-graphics))))
+      (assoc-in state [:remove-graphics :completed] true))
+
+    ptk/WatchEvent
+    (watch [_ state _]
+      (when-not (get-in state [:remove-graphics :error])
+        (rx/of (modal/hide))))))
 
 (defn- create-shapes-svg
   [file-id objects pos media-obj]
@@ -1624,12 +1645,7 @@
          (rx/map #(vector (:name media-obj) %))
          (rx/merge-map dwm/svg->clj)
          (rx/merge-map upload-images)
-         (rx/map process-svg)
-         (rx/catch  ; When error downloading media-obj, skip it and continue with next one
-           #(log/error :hint "error downloading file"
-                       :path path
-                       :name (:name media-obj)
-                       :cause %)))))
+         (rx/map process-svg))))
 
 (defn- create-shapes-img
   [pos {:keys [name width height id mtype] :as media-obj}]
@@ -1692,9 +1708,14 @@
                  (create-shapes-svg (:id file-data) (:objects page) pos media-obj)
                  (create-shapes-img pos media-obj))]
 
-      (rx/concat
-        (rx/of (update-remove-graphics index))
-        (rx/map process-shapes shapes))))
+    (->> (rx/concat
+           (rx/of (update-remove-graphics index))
+           (rx/map process-shapes shapes))
+         (rx/catch #(do
+                      (log/error :msg (str "Error removing " (:name media-obj))
+                                 :hint (ex-message %)
+                                 :error %)
+                      (rx/of (error-in-remove-graphics)))))))
 
 (defn- remove-graphics
   [file-id file-name]
@@ -1731,8 +1752,7 @@
                                            (pcb/add-page (:id page) page)))))
           (rx/mapcat (partial remove-graphic it file-data' page)
                      (rx/from (d/enumerate (d/zip media shape-grid))))
-          (rx/of (modal/hide)
-                 (complete-remove-graphics)))))))
+          (rx/of (complete-remove-graphics)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Exports
