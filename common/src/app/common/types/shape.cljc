@@ -6,6 +6,7 @@
 
 (ns app.common.types.shape
   (:require
+   #?(:clj [app.common.fressian :as fres])
    [app.common.colors :as clr]
    [app.common.data :as d]
    [app.common.exceptions :as ex]
@@ -266,6 +267,23 @@
 
 ;; --- Initialization
 
+(defrecord Shape [id parent-id frame-id name type transform transform-inverse x y selrect])
+(defrecord SelRect [x y x1 x2 y1 y2 width height])
+
+#?(:clj
+   (fres/add-handlers!
+    {:name "penpot/shape/v1"
+     :class Shape
+     :wfn fres/write-map-like
+     :rfn (fn [r]
+            (-> r fres/read-map-like map->Shape))}))
+
+(t/add-handlers!
+ {:id "penpot/shape/v1"
+  :class Shape
+  :wfn #(into {} %)
+  :rfn map->Shape})
+
 (def default-shape-attrs
   {})
 
@@ -276,6 +294,7 @@
    :strokes []
    :shapes []
    :hide-fill-on-export false})
+
 
 (def ^:private minimal-shapes
   [{:type :rect
@@ -327,10 +346,11 @@
    {:type :svg-raw}])
 
 (def empty-selrect
-  {:x  0    :y  0
-   :x1 0    :y1 0
-   :x2 0.01    :y2 0.01
-   :width 0.01 :height 0.01})
+  (map->SelRect
+   {:x  0    :y  0
+    :x1 0    :y1 0
+    :x2 0.01    :y2 0.01
+    :width 0.01 :height 0.01}))
 
 (defn make-minimal-shape
   [type]
@@ -351,26 +371,20 @@
              :y 0
              :width 0.01
              :height 0.01
-             :selrect {:x 0
-                       :y 0
-                       :x1 0
-                       :y1 0
-                       :x2 0.01
-                       :y2 0.01
-                       :width 0.01
-                       :height 0.01}))))
+             :selrect empty-selrect))))
 
 (defn make-minimal-group
   [frame-id rect group-name]
-  {:id (uuid/next)
-   :type :group
-   :name group-name
-   :shapes []
-   :frame-id frame-id
-   :x (:x rect)
-   :y (:y rect)
-   :width (:width rect)
-   :height (:height rect)})
+  (map->Shape
+   {:id (uuid/next)
+    :type :group
+    :name group-name
+    :shapes []
+    :frame-id frame-id
+    :x (:x rect)
+    :y (:y rect)
+    :width (:width rect)
+    :height (:height rect)}))
 
 (defn setup-rect-selrect
   "Initializes the selrect and points for a shape."
