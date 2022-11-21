@@ -355,8 +355,9 @@
 (defn only-move?
   "Returns true if there are only move operations"
   [{:keys [geometry-child geometry-parent]}]
-  (and (every? #(= :move (:type %)) geometry-child)
-       (every? #(= :move (:type %)) geometry-parent)))
+  (let [move-op? #(= :move (:type %))]
+    (and (every? move-op? geometry-child)
+         (every? move-op? geometry-parent))))
 
 (defn has-geometry?
   [{:keys [geometry-parent geometry-child]}]

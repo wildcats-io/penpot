@@ -6,6 +6,11 @@
 
 (ns app.main.ui.workspace.shapes.frame
   (:require
+   [cuerdas.core :as str]
+   [app.common.geom.point :as gpt]
+   [app.common.geom.shapes.intersect :as gsi]
+   [app.common.geom.shapes.points :as gsp]
+   
    [app.common.data :as d]
    [app.common.data.macros :as dm]
    [app.common.pages.helpers :as cph]
@@ -37,11 +42,53 @@
 
       (let [shape      (unchecked-get props "shape")
             childs-ref (mf/use-memo (mf/deps (:id shape)) #(refs/children-objects (:id shape)))
-            childs     (mf/deref childs-ref)]
+            childs     (mf/deref childs-ref)
 
-        [:& (mf/provider embed/context) {:value true}
-         [:& shape-container {:shape shape :ref ref :disable-shadows? (cph/root-frame? shape)}
-          [:& frame-shape {:shape shape :childs childs} ]]]))))
+            [p1 p2 p3 p4] (:points shape)
+            hv (gpt/to-vec p1 p2) ;; horizontal vector
+            vv (gpt/to-vec p1 p4) ;; vertical vector
+            ]
+
+        [:*
+         [:& (mf/provider embed/context) {:value true}
+          [:& shape-container {:shape shape :ref ref :disable-shadows? (cph/root-frame? shape)}
+           [:& frame-shape {:shape shape :childs childs} ]]]
+
+         (for [child childs]
+           (let [[b1 b2 b3 b4 :as bounds] (gsp/closest-first (:points child) p1 p2)
+                 
+                 b1' (gpt/add b1 hv)
+                 b2' (gpt/add b2 vv)
+                 b3' (gpt/add b3 hv)
+                 b4' (gpt/add b4 vv)
+
+                 i1 (gsi/line-line-intersect b1 (gpt/add hv b1) b4 (gpt/add b4 vv))
+                 i2 (gsi/line-line-intersect b1 (gpt/add hv b1) b2 (gpt/add b2 vv))
+                 i3 (gsi/line-line-intersect b3 (gpt/add hv b3) b2 (gpt/add b2 vv))
+                 i4 (gsi/line-line-intersect b3 (gpt/add hv b3) b4 (gpt/add b4 vv))
+                 ]
+             [:*
+              #_(for [[color a b c d] [["blue" b1 b1' b4 b4']
+                                     #_["green" b1 b1' b2 b2']
+                                     #_["orange" b3 b3' b2 b2']
+                                     #_["brown" b3 b3' b4 b4']]]
+
+                [:g
+                 [:line {:x1 (:x a)
+                         :y1 (:y a)
+                         :x2 (:x b)
+                         :y2 (:y b)
+                         :style {:fill "none" :stroke color :stroke-width 1}}]
+                 [:line {:x1 (:x c)
+                         :y1 (:y c)
+                         :x2 (:x d)
+                         :y2 (:y d)
+                         :style {:fill "none" :stroke color :stroke-width 1}}]])
+              
+              [:polygon {:points (->> [i1 i2 i3 i4] (map #(dm/fmt "%,%" (:x %) (:y %))) (str/join ","))
+                         :style {:fill "none" :stroke "red" :stroke-width 1}
+                         }]]))
+         ]))))
 
 (defn check-props
   [new-props old-props]

@@ -7,11 +7,12 @@
 (ns app.common.geom.shapes.constraints
   (:require
    [app.common.geom.point :as gpt]
+   [app.common.geom.matrix :as gmt]
    [app.common.geom.shapes.common :as gco]
    [app.common.geom.shapes.intersect :as gsi]
    [app.common.geom.shapes.points :as gpo]
-   [app.common.geom.shapes.rect :as gre]
-   [app.common.geom.shapes.transforms :as gst]
+   [app.common.geom.shapes.rect :as gpr]
+   [app.common.geom.shapes.transforms :as gtr]
    [app.common.math :as mth]
    [app.common.types.modifiers :as ctm]
    [app.common.uuid :as uuid]))
@@ -184,7 +185,7 @@
     (ctm/move-modifiers (displacement end-before end-after))))
 
 (defmethod constraint-modifier :fixed
-  [_ axis child-points-before parent-points-before child-points-after parent-points-after transformed-parent]
+  [_ axis child-points-before parent-points-before child-points-after parent-points-after parent]
   (let [;; Same as constraint end
         end-before   (end-vector axis child-points-before parent-points-before)
         end-after    (end-vector axis child-points-after parent-points-after)
@@ -204,7 +205,7 @@
         scale        (/ (gpt/length after-vec) (gpt/length before-vec))
 
         resize-origin (first child-points-after)
-        {:keys [transform transform-inverse]} transformed-parent]
+        {:keys [transform transform-inverse]} parent]
 
     (-> (ctm/empty)
         (ctm/resize (get-scale axis scale) resize-origin transform transform-inverse)
@@ -245,7 +246,7 @@
       :top
       :scale)))
 
-(defn bounding-box-parent-transform
+#_(defn bounding-box-parent-transform
   "Returns a bounding box for the child in the same coordinate system
   as the parent.
   Returns a points array"
@@ -253,29 +254,46 @@
   (-> child
       :points
       (gco/transform-points (:transform-inverse parent))
-      (gre/points->rect)
-      (gre/rect->points) ;; Restore to points so we can transform them
+      (gpr/points->rect)
+      (gpr/rect->points) ;; Restore to points so we can transform them
       (gco/transform-points (:transform parent))))
 
 (defn normalize-modifiers
   "Before aplying constraints we need to remove the deformation caused by the resizing of the parent"
-  [constraints-h constraints-v modifiers child parent transformed-child {:keys [transform transform-inverse] :as transformed-parent}]
+  [constraints-h constraints-v modifiers child {:keys [transform transform-inverse] :as parent} transformed-child-bounds transformed-parent-bounds]
 
-  (let [child-bb-before (gst/parent-coords-rect child parent)
-        child-bb-after  (gst/parent-coords-rect transformed-child transformed-parent)
-        scale-x (/ (:width child-bb-before) (:width child-bb-after))
-        scale-y (/ (:height child-bb-before) (:height child-bb-after))
-        resize-origin (-> transformed-parent :points gpo/origin)]
+  (let [child-bb-before (gpo/parent-coords-bounds (:points child) (:points parent))
+        child-bb-after  (gpo/parent-coords-bounds transformed-child-bounds transformed-parent-bounds)
+        
+        scale-x (if (= :scale constraints-h)
+                  1
+                  (/ (gpo/width-points child-bb-before) (gpo/width-points child-bb-after)))
 
-    (cond-> modifiers
-      (not= :scale constraints-h)
-      (ctm/resize (gpt/point scale-x 1) resize-origin transform transform-inverse)
+        scale-y (if (= :scale constraints-v)
+                  1
+                  (/ (gpo/height-points child-bb-before) (gpo/height-points child-bb-after)))
 
-      (not= :scale constraints-v)
-      (ctm/resize (gpt/point 1 scale-y) resize-origin transform transform-inverse))))
+        tr1 (ctm/modifiers->transform modifiers)
+        tr1-inv (gmt/inverse tr1)
+
+        resize-vector (gpt/point scale-x scale-y)
+        resize-transform (gmt/multiply tr1 transform)
+        resize-transform-inverse (gmt/multiply transform-inverse tr1-inv)
+        resize-origin (-> (gpo/origin transformed-child-bounds)
+                          (gpt/transform tr1))
+
+        _ (prn "?? " scale-x scale-y)
+        ]
+
+    (-> modifiers
+        (ctm/resize
+         resize-vector
+         resize-origin
+         resize-transform
+         resize-transform-inverse))))
 
 (defn calc-child-modifiers
-  [parent child modifiers ignore-constraints transformed-parent]
+  [parent child modifiers ignore-constraints parent-bounds transformed-parent-bounds]
 
   (let [modifiers (ctm/select-child-modifiers modifiers)
 
@@ -292,26 +310,27 @@
     (if (and (= :scale constraints-h) (= :scale constraints-v))
       modifiers
 
-      (let [transformed-child (gst/transform-shape child (ctm/select-child-modifiers modifiers))
-            modifiers (normalize-modifiers constraints-h constraints-v modifiers child parent transformed-child transformed-parent)
+      (let [child-bounds (:points child)
+            modifiers (ctm/select-child-modifiers modifiers)
+            transformed-child-bounds (gtr/transform-bounds child-bounds modifiers)
+            modifiers (normalize-modifiers constraints-h constraints-v modifiers child parent transformed-child-bounds transformed-parent-bounds)
+            transformed-child-bounds (gtr/transform-bounds child-bounds modifiers)
 
-            transformed-child (gst/transform-shape child modifiers)
-
-            parent-points-before (bounding-box-parent-transform parent parent)
-            child-points-before  (bounding-box-parent-transform child parent)
-            parent-points-after  (bounding-box-parent-transform transformed-parent transformed-parent)
-            child-points-after   (bounding-box-parent-transform transformed-child transformed-parent)
+            parent-points-before parent-bounds #_(gpo/parent-coords-bounds parent-bounds parent-bounds)
+            child-points-before  (gpo/parent-coords-bounds child-bounds parent-bounds)
+            parent-points-after  transformed-parent-bounds #_(gpo/parent-coords-bounds transformed-parent-bounds transformed-parent-bounds)
+            child-points-after   (gpo/parent-coords-bounds transformed-child-bounds transformed-parent-bounds)
 
             modifiers-h (constraint-modifier (constraints-h const->type+axis) :x
                                              child-points-before parent-points-before
                                              child-points-after parent-points-after
-                                             transformed-parent)
+                                             parent)
 
             modifiers-v (constraint-modifier (constraints-v const->type+axis) :y
                                              child-points-before parent-points-before
                                              child-points-after parent-points-after
-                                             transformed-parent)]
+                                             parent)]
 
         (-> modifiers
-            (ctm/add-modifiers modifiers-h)
-            (ctm/add-modifiers modifiers-v))))))
+            #_(ctm/add-modifiers modifiers-h)
+            #_(ctm/add-modifiers modifiers-v))))))

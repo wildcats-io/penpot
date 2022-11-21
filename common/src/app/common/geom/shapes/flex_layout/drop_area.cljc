@@ -188,7 +188,7 @@
   (let [frame       (get objects frame-id)
         position    (gmt/transform-point-center position (gco/center-shape frame) (:transform-inverse frame))
         children    (cph/get-immediate-children objects frame-id)
-        layout-data (fli/calc-layout-data frame children)
+        layout-data (fli/calc-layout-data frame children (:points frame))
         drop-areas  (layout-drop-areas frame layout-data children)
         area        (d/seek #(gsr/contains-point? % position) drop-areas)]
     (:index area)))

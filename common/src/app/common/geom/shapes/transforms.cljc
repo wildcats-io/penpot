@@ -536,19 +536,3 @@
 
        :else
        group))))
-
-(defn parent-coords-rect
-  [child parent]
-  (-> child
-      :points
-      (gco/transform-points (:transform-inverse parent))
-      (gpr/points->rect)))
-
-(defn parent-coords-points
-  [child parent]
-  (-> child
-      :points
-      (gco/transform-points (:transform-inverse parent))
-      (gpr/points->rect)
-      (gpr/rect->points)
-      (gco/transform-points (:transform parent))))

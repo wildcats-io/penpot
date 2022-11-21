@@ -76,7 +76,7 @@
             col? (ctl/col? shape)
 
             children (cph/get-immediate-children objects (:id shape))
-            layout-data (gsl/calc-layout-data shape children)
+            layout-data (gsl/calc-layout-data shape children (:points shape))
 
             layout-bounds (:layout-bounds layout-data)
             xv   #(gpo/start-hv layout-bounds %)
@@ -113,7 +113,7 @@
 
     (when (and shape (:layout shape))
       (let [children (cph/get-immediate-children objects (:id shape))
-            layout-data (gsl/calc-layout-data shape children)
+            layout-data (gsl/calc-layout-data shape children (:points shape))
             drop-areas (gsl/layout-drop-areas shape layout-data children)]
         [:g.debug-layout {:pointer-events "none"
                           :transform (gsh/transform-str shape)}

@@ -9,21 +9,21 @@
    [app.common.data :as d]
    [app.common.geom.shapes.flex-layout.positions :as flp]
    [app.common.geom.shapes.points :as gpo]
-   [app.common.geom.shapes.transforms :as gst]
+   [app.common.geom.shapes.transforms :as gtr]
    [app.common.math :as mth]
    [app.common.types.shape.layout :as ctl]))
 
 (def conjv (fnil conj []))
 
 (defn layout-bounds
-  [{:keys [layout-padding layout-padding-type] :as shape}]
+  [{:keys [layout-padding layout-padding-type] :as shape} shape-bounds]
   (let [;; Add padding to the bounds
         {pad-top :p1 pad-right :p2 pad-bottom :p3 pad-left :p4} layout-padding
         [pad-top pad-right pad-bottom pad-left]
         (if (= layout-padding-type :multiple)
           [pad-top pad-right pad-bottom pad-left]
           [pad-top pad-top pad-top pad-top])]
-    (gpo/pad-points (:points shape) pad-top pad-right pad-bottom pad-left)))
+    (gpo/pad-points shape-bounds pad-top pad-right pad-bottom pad-left)))
 
 (defn init-layout-lines
   "Calculates the lines basic data and accumulated values. The positions will be calculated in a different operation"
@@ -54,7 +54,7 @@
                       num-children
                       children-data]} line-data
 
-              child-bounds     (gst/parent-coords-points child shape)
+              child-bounds     (gpo/parent-coords-bounds (:points child) layout-bounds)
               child-width      (gpo/width-points child-bounds)
               child-height     (gpo/height-points child-bounds)
               child-min-width  (ctl/child-min-width child)
@@ -300,9 +300,9 @@
 
 (defn calc-layout-data
   "Digest the layout data to pass it to the constrains"
-  [shape children]
+  [shape children shape-bounds]
 
-  (let [layout-bounds (layout-bounds shape)
+  (let [layout-bounds (layout-bounds shape shape-bounds)
         reverse?      (ctl/reverse? shape)
         children      (cond->> children reverse? reverse)
 
@@ -317,3 +317,4 @@
     {:layout-lines layout-lines
      :layout-bounds layout-bounds
      :reverse? reverse?}))
+

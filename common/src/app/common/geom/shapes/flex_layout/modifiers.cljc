@@ -9,20 +9,22 @@
    [app.common.geom.point :as gpt]
    [app.common.geom.shapes.flex-layout.positions :as fpo]
    [app.common.geom.shapes.points :as gpo]
-   [app.common.geom.shapes.transforms :as gst]
+   [app.common.geom.shapes.transforms :as gtr]
    [app.common.types.modifiers :as ctm]
    [app.common.types.shape.layout :as ctl]))
 
 (defn normalize-child-modifiers
   "Apply the modifiers and then normalized them against the parent coordinates"
-  [modifiers parent child {:keys [transform transform-inverse] :as transformed-parent}]
+  [modifiers {:keys [transform transform-inverse] :as parent} child transformed-parent-bounds]
 
-  (let [transformed-child (gst/transform-shape child modifiers)
-        child-bb-before (gst/parent-coords-rect child parent)
-        child-bb-after  (gst/parent-coords-rect transformed-child transformed-parent)
+  (let [child-bounds (:points child)
+        parent-bounds (:points parent)
+        transformed-child-bounds (gtr/transform-bounds child-bounds modifiers)
+        child-bb-before (gpo/parent-coords-bounds child-bounds parent-bounds)
+        child-bb-after  (gpo/parent-coords-bounds transformed-child-bounds transformed-parent-bounds)
         scale-x (/ (:width child-bb-before) (:width child-bb-after))
         scale-y (/ (:height child-bb-before) (:height child-bb-after))
-        resize-origin (-> transformed-parent :points gpo/origin)
+        resize-origin (gpo/origin transformed-parent-bounds)
         resize-vector (gpt/point scale-x scale-y)]
     (-> modifiers
         (ctm/select-child-modifiers)
@@ -75,7 +77,7 @@
 (defn layout-child-modifiers
   "Calculates the modifiers for the layout"
   [parent child layout-line]
-  (let [child-bounds (gst/parent-coords-points child parent)
+  (let [child-bounds (gpo/parent-coords-bounds (:points child) (:points parent))
 
         child-origin (gpo/origin child-bounds)
         child-width  (gpo/width-points child-bounds)
